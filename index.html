@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Wars 完美清晰版</title>
+    <title>Pixel Wars 終極銳利版</title>
     <style>
         body {
             margin: 0;
-            background-color: #1a1a1a;
+            background-color: #121212;
             color: white;
             font-family: sans-serif;
             overflow: hidden;
@@ -28,6 +28,7 @@
         h1 { margin: 0; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
         p { margin: 5px 0 0 0; font-size: 12px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
 
+        /* 全螢幕縮放容器 */
         #viewport {
             width: 100vw;
             height: 100vh;
@@ -38,10 +39,24 @@
         }
         #viewport:active { cursor: grabbing; }
 
-        /* 🔥 關鍵修正 1：用 CSS Transform 平移，並關閉鋸齒，確保放大100%清晰 */
+        /* 畫布外殼：這裡用 CSS 來渲染完美的像素格線 */
+        #canvas-wrapper {
+            position: absolute;
+            box-shadow: 0 0 40px rgba(0,0,0,0.6);
+            background-color: white;
+            /* 預設沒放大時格線淡淡的，才不會整片黑黑的 */
+            background-image: 
+                linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
+            background-size: 10px 10px; /* 一個格子 10x10 */
+            transform-origin: 0 0;
+        }
+
+        /* ⚡ 終極修正：強制關閉瀏覽器的模糊平滑功能，還原顆粒感 */
         canvas {
             display: block;
-            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            width: 100%;
+            height: 100%;
             image-rendering: -moz-crisp-edges;
             image-rendering: -webkit-crisp-edges;
             image-rendering: pixelated;
@@ -81,11 +96,13 @@
 
     <div id="ui-top">
         <h1>Pixel Wars 像素大戰</h1>
-        <p id="status">雙指放大到極限即可看見精細格線！</p>
+        <p id="status">規格：500x500 | 雙指放大後即可看到清晰網格！</p>
     </div>
 
     <div id="viewport">
-        <canvas id="pixelCanvas"></canvas>
+        <div id="canvas-wrapper">
+            <canvas id="pixelCanvas"></canvas>
+        </div>
     </div>
 
     <div id="ui-bottom">
@@ -103,18 +120,27 @@
 
     <script>
         const viewport = document.getElementById('viewport');
+        const wrapper = document.getElementById('canvas-wrapper');
         const canvas = document.getElementById('pixelCanvas');
         const ctx = canvas.getContext('2d');
         const palette = document.getElementById('palette');
 
-        // 設定地圖大小（500x500 像素）
+        // 設定地圖格數 500x500
         const MAP_SIZE = 500; 
-        
-        // 為了讓畫質無損清晰，我們將畫布實際大小設為 2000x2000
-        // 也就是說，一個像素在畫布上實體佔用 4x4 的空間，這樣放大才不會糊！
-        const CELL_SIZE = 4;
-        canvas.width = MAP_SIZE * CELL_SIZE;
-        canvas.height = MAP_SIZE * CELL_SIZE;
+        // 每一格在畫布上的實體基礎大小設定為 10 像素
+        const CELL_SIZE = 10;
+
+        // 設定容器和 Canvas 的尺寸大小
+        wrapper.style.width = (MAP_SIZE * CELL_SIZE) + 'px';
+        wrapper.style.height = (MAP_SIZE * CELL_SIZE) + 'px';
+        canvas.width = MAP_SIZE;
+        canvas.height = MAP_SIZE;
+
+        // 🟢 核心 JavaScript 修正：關閉 Canvas 內建的圖片平滑模糊功能
+        ctx.imageSmoothingEnabled = false;
+        ctx.mozImageSmoothingEnabled = false;
+        ctx.webkitImageSmoothingEnabled = false;
+        ctx.msImageSmoothingEnabled = false;
 
         let scale = 1;         
         let offsetX = 0;       
@@ -126,52 +152,42 @@
         let isPanning = false;  
         let selectedColor = '#000000';
 
-        // 模擬本地像素資料
         const localMap = {}; 
 
         function centerCanvas() {
-            scale = Math.min(window.innerWidth, window.innerHeight) / canvas.width * 0.9;
-            offsetX = (window.innerWidth - canvas.width * scale) / 2;
-            offsetY = (window.innerHeight - canvas.height * scale) / 2;
+            // 讓整個 500x500 的大畫布預設縮小完整塞進螢幕
+            scale = Math.min(window.innerWidth, window.innerHeight) / (MAP_SIZE * CELL_SIZE) * 0.9;
+            offsetX = (window.innerWidth - (MAP_SIZE * CELL_SIZE) * scale) / 2;
+            offsetY = (window.innerHeight - (MAP_SIZE * CELL_SIZE) * scale) / 2;
             render();
         }
 
-        // 🔥 關鍵修正 2：重新設計渲染引擎，動態繪製格子與格線
         function render() {
+            // 重新繪製 Canvas 本身
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 1. 填滿底色（白色）
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // 2. 畫出玩家點擊的像素方塊
+            // 繪製玩家點擊的點（1x1 的真實像素點）
             for (let key in localMap) {
                 const [x, y] = key.split(',').map(Number);
                 ctx.fillStyle = localMap[key];
-                // 留出 0.5 像素的空隙，這樣自然就會形成「清晰的灰格線」，不用額外消耗效能畫線！
-                ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                ctx.fillRect(x, y, 1, 1);
             }
 
-            // 3. 當放大到一定程度時，用高效率的方式補上網格線，沒放大時隱藏以免畫面太黑
-            if (scale > 1.5) {
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
-                ctx.lineWidth = 0.5;
-                for (let i = 0; i <= MAP_SIZE; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(i * CELL_SIZE, 0);
-                    ctx.lineTo(i * CELL_SIZE, canvas.height);
-                    ctx.stroke();
-
-                    ctx.beginPath();
-                    ctx.moveTo(0, i * CELL_SIZE);
-                    ctx.lineTo(canvas.width, i * CELL_SIZE);
-                    ctx.stroke();
-                }
+            // 當放大倍率很高時，加深 CSS 網格線的顏色，方便玩家對齊；縮小時變淡
+            if (scale > 0.8) {
+                wrapper.style.backgroundImage = `
+                    linear-gradient(to right, rgba(0,0,0,0.15) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0,0,0,0.15) 1px, transparent 1px)
+                `;
+            } else {
+                wrapper.style.backgroundImage = `
+                    linear-gradient(to right, rgba(0,0,0,0.03) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0,0,0,0.03) 1px, transparent 1px)
+                `;
             }
 
-            // 套用位置與縮放
-            canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
-            canvas.style.transformOrigin = '0 0';
+            // 同步對容器做平移和縮放
+            wrapper.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
         }
 
         // --- 電腦滑鼠事件 ---
@@ -196,7 +212,7 @@
             isDragging = false;
             
             if (!isPanning) {
-                // 計算出點擊到 500x500 中的哪一格
+                // 計算點擊位置對應到 500x500 的哪一格
                 const clickX = Math.floor((e.clientX - offsetX) / (scale * CELL_SIZE));
                 const clickY = Math.floor((e.clientY - offsetY) / (scale * CELL_SIZE));
 
@@ -220,7 +236,7 @@
             } else {
                 scale /= zoomFactor;
             }
-            scale = Math.max(0.1, Math.min(scale, 30));
+            scale = Math.max(0.05, Math.min(scale, 15)); // 限制縮放範圍
 
             offsetX = mouseX - canvasX * scale;
             offsetY = mouseY - canvasY * scale;
@@ -228,13 +244,13 @@
         }, { passive: false });
 
 
-        // --- 手機觸控事件 ---
+        // --- 手機/平版觸控事件 ---
         viewport.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
                 isPanning = false;
                 startX = e.touches[0].clientX - offsetX;
-                startY = e.touches[0].setTimeout = e.touches[0].clientY - offsetY;
+                startY = e.touches[0].clientY - offsetY;
             } else if (e.touches.length === 2) {
                 isDragging = false; 
                 startScale = scale;
@@ -263,7 +279,7 @@
                 const canvasX = (midX - offsetX) / scale;
                 const canvasY = (midY - offsetY) / scale;
 
-                scale = Math.max(0.1, Math.min(startScale * factor, 30));
+                scale = Math.max(0.05, Math.min(startScale * factor, 15));
                 offsetX = midX - canvasX * scale;
                 offsetY = midY - canvasY * scale;
                 render();
