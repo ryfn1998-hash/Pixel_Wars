@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Wars 1000x1000</title>
+    <title>Pixel Wars 500x500</title>
     <style>
         body {
             margin: 0;
             background-color: #121212;
             color: white;
             font-family: sans-serif;
-            overflow: hidden; /* 防止手機瀏覽器亂滾動 */
+            overflow: hidden;
             position: fixed;
             width: 100%;
             height: 100%;
         }
         
-        /* 頂部標題 */
         #ui-top {
             position: absolute;
             top: 10px;
@@ -24,12 +23,12 @@
             transform: translateX(-50%);
             text-align: center;
             z-index: 10;
-            pointer-events: none; /* 讓點擊穿透到畫布 */
+            pointer-events: none;
         }
         h1 { margin: 0; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
         p { margin: 5px 0 0 0; font-size: 12px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
 
-        /* 全螢幕畫布容器 */
+        /* 全螢幕縮放視區 */
         #viewport {
             width: 100vw;
             height: 100vh;
@@ -40,7 +39,16 @@
         }
         #viewport:active { cursor: grabbing; }
 
-        /* 底部選色工具列 */
+        /* 🔥 關鍵修正：強制瀏覽器在放大 Canvas 時保持完美的像素方塊，不准模糊化 */
+        canvas {
+            display: block;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            background-color: white;
+        }
+
         #ui-bottom {
             position: absolute;
             bottom: 20px;
@@ -74,7 +82,7 @@
 
     <div id="ui-top">
         <h1>Pixel Wars 像素大戰</h1>
-        <p id="status">雙指可放大縮小，單指滑動可拖曳畫布</p>
+        <p id="status">畫布大小：500x500 | 雙指放大、單指拖曳</p>
     </div>
 
     <div id="viewport">
@@ -100,26 +108,23 @@
         const ctx = canvas.getContext('2d');
         const palette = document.getElementById('palette');
 
-        // 正式設定為 1000x1000 像素大畫布
-        const MAP_SIZE = 1000; 
+        // 🟢 正式微調為 500x500 像素
+        const MAP_SIZE = 500; 
         canvas.width = MAP_SIZE;
         canvas.height = MAP_SIZE;
 
-        // 縮放與拖曳狀態變數
-        let scale = 1;         // 目前放大倍率
-        let offsetX = 0;       // 畫布 X 軸偏移量
-        let offsetY = 0;       // 畫布 Y 軸偏移量
+        let scale = 1;         
+        let offsetX = 0;       
+        let offsetY = 0;       
         let isDragging = false;
         let startX, startY;
-        let touchStartDist = 0; // 手機雙指初始距離
+        let touchStartDist = 0; 
         let startScale = 1;
-        let isPanning = false;  // 是否正在拖曳
+        let isPanning = false;  
         let selectedColor = '#000000';
 
-        // 模擬暫存本地的畫布資料（等串接 Firebase 後會改成從資料庫抓）
         const localMap = {}; 
 
-        // 初始化：把畫布移到螢幕中央
         function centerCanvas() {
             scale = Math.min(window.innerWidth, window.innerHeight) / MAP_SIZE * 0.8;
             offsetX = (window.innerWidth - MAP_SIZE * scale) / 2;
@@ -127,7 +132,7 @@
             render();
         }
 
-        // 核心渲染機制：每次畫面移動或放大，都重新繪製視區
+        // 核心渲染：500x500 格子中，我們直接在（X, Y）畫一個寬高為 1 的方形
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -135,14 +140,14 @@
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
 
-            // 畫出所有已經上色的像素
+            // 畫出所有像素點（1x1 像素）
             for (let key in localMap) {
                 const [x, y] = key.split(',').map(Number);
                 ctx.fillStyle = localMap[key];
                 ctx.fillRect(x, y, 1, 1);
             }
 
-            // 將縮放與平移樣式套用到 Canvas DOM 上
+            // 套用縮放與平移
             canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
             canvas.style.transformOrigin = '0 0';
         }
@@ -168,9 +173,7 @@
             if (!isDragging) return;
             isDragging = false;
             
-            // 如果不是在拖曳畫布，那就是點擊上色
             if (!isPanning) {
-                const rect = canvas.getBoundingClientRect();
                 const clickX = Math.floor((e.clientX - offsetX) / scale);
                 const clickY = Math.floor((e.clientY - offsetY) / scale);
 
@@ -181,32 +184,28 @@
             }
         });
 
-        // 電腦版滾輪放大縮小
         viewport.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const zoomFactor = 1.1;
+            const zoomFactor = 1.15;
             const mouseX = e.clientX;
             const mouseY = e.clientY;
-
-            // 計算滑鼠在畫布上的相對座標
             const canvasX = (mouseX - offsetX) / scale;
             const canvasY = (mouseY - offsetY) / scale;
 
             if (e.deltaY < 0) {
-                scale *= zoomFactor; // 放大
+                scale *= zoomFactor;
             } else {
-                scale /= zoomFactor; // 縮小
+                scale /= zoomFactor;
             }
-            scale = Math.max(0.2, Math.min(scale, 50)); // 限制放大範圍在 0.2倍 ~ 50倍
+            scale = Math.max(0.5, Math.min(scale, 80)); // 允許放大到 80 倍，方塊更明顯
 
-            // 修正偏移量，讓縮放中心對準滑鼠指針
             offsetX = mouseX - canvasX * scale;
             offsetY = mouseY - canvasY * scale;
             render();
         }, { passive: false });
 
 
-        // --- 手機版觸控事件（支援雙指放大與拖曳） ---
+        // --- 手機版觸控事件 ---
         viewport.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -214,9 +213,8 @@
                 startX = e.touches[0].clientX - offsetX;
                 startY = e.touches[0].clientY - offsetY;
             } else if (e.touches.length === 2) {
-                isDragging = false; // 轉為雙指縮放模式
+                isDragging = false; 
                 startScale = scale;
-                // 計算雙指間的初始距離
                 touchStartDist = Math.hypot(
                     e.touches[0].clientX - e.touches[1].clientX,
                     e.touches[0].clientY - e.touches[1].clientY
@@ -232,20 +230,17 @@
                 offsetY = e.touches[0].clientY - startY;
                 render();
             } else if (e.touches.length === 2) {
-                // 雙指縮放邏輯
                 const dist = Math.hypot(
                     e.touches[0].clientX - e.touches[1].clientX,
                     e.touches[0].clientY - e.touches[1].clientY
                 );
                 const factor = dist / touchStartDist;
-                
-                // 雙指中心點
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 const canvasX = (midX - offsetX) / scale;
                 const canvasY = (midY - offsetY) / scale;
 
-                scale = Math.max(0.2, Math.min(startScale * factor, 50));
+                scale = Math.max(0.5, Math.min(startScale * factor, 80));
                 offsetX = midX - canvasX * scale;
                 offsetY = midY - canvasY * scale;
                 render();
@@ -254,7 +249,6 @@
 
         viewport.addEventListener('touchend', (e) => {
             if (isDragging && !isPanning && e.changedTouches.length > 0) {
-                // 手機單指點擊上色
                 const touch = e.changedTouches[0];
                 const clickX = Math.floor((touch.clientX - offsetX) / scale);
                 const clickY = Math.floor((touch.clientY - offsetY) / scale);
@@ -267,7 +261,6 @@
             isDragging = false;
         });
 
-        // 處理顏色切換
         palette.addEventListener('click', (e) => {
             if (e.target.classList.contains('color-btn')) {
                 document.querySelector('.color-btn.active').classList.remove('active');
@@ -276,7 +269,6 @@
             }
         });
 
-        // 初始化
         window.addEventListener('resize', render);
         centerCanvas();
     </script>
