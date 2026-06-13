@@ -2,147 +2,283 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pixel Wars</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixel Wars 1000x1000</title>
     <style>
         body {
             margin: 0;
-            background-color: #1e1e1e;
+            background-color: #121212;
             color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
             font-family: sans-serif;
+            overflow: hidden; /* 防止手機瀏覽器亂滾動 */
+            position: fixed;
+            width: 100%;
+            height: 100%;
         }
-        h1 { margin-top: 20px; margin-bottom: 5px; }
         
-        /* 畫布外框與樣式 */
-        #canvas-container {
-            margin: 20px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            background-color: white;
+        /* 頂部標題 */
+        #ui-top {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+            pointer-events: none; /* 讓點擊穿透到畫布 */
         }
-        canvas {
-            display: block;
-            cursor: crosshair; /* 滑鼠變成十字準星 */
-        }
+        h1 { margin: 0; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+        p { margin: 5px 0 0 0; font-size: 12px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
 
-        /* 選色器工具列 */
+        /* 全螢幕畫布容器 */
+        #viewport {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: grab;
+        }
+        #viewport:active { cursor: grabbing; }
+
+        /* 底部選色工具列 */
+        #ui-bottom {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
         .palette {
             display: flex;
-            gap: 10px;
-            margin-top: 10px;
-            background: #2a2a2a;
-            padding: 10px 20px;
+            gap: 8px;
+            background: rgba(40, 40, 40, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 8px 15px;
             border-radius: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
         .color-btn {
-            width: 35px;
-            height: 35px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
-            border: 3px solid transparent;
+            border: 2px solid transparent;
             cursor: pointer;
-            transition: transform 0.1s;
-        }
-        .color-btn:hover {
-            transform: scale(1.1);
         }
         .color-btn.active {
-            border-color: white; /* 被選中的顏色圈圈會發白框 */
+            border-color: white;
+            transform: scale(1.1);
         }
     </style>
 </head>
 <body>
 
-    <h1>Pixel Wars 像素大戰</h1>
-    <p>目前狀態：單機測試版（點擊畫布即可上色）</p>
-
-    <!-- 畫布容器 -->
-    <div id="canvas-container">
-        <canvas id="pixelCanvas" width="500" height="500"></canvas>
+    <div id="ui-top">
+        <h1>Pixel Wars 像素大戰</h1>
+        <p id="status">雙指可放大縮小，單指滑動可拖曳畫布</p>
     </div>
 
-    <!-- 選色工具列 -->
-    <div class="palette" id="palette">
-        <div class="color-btn active" style="background-color: #000000;" data-color="#000000"></div>
-        <div class="color-btn" style="background-color: #ffffff; border: 1px solid #ccc;" data-color="#ffffff"></div>
-        <div class="color-btn" style="background-color: #e50000;" data-color="#e50000"></div>
-        <div class="color-btn" style="background-color: #00cc00;" data-color="#00cc00"></div>
-        <div class="color-btn" style="background-color: #0000e5;" data-color="#0000e5"></div>
-        <div class="color-btn" style="background-color: #f5f500;" data-color="#f5f500"></div>
-        <div class="color-btn" style="background-color: #a000a0;" data-color="#a000a0"></div>
-        <div class="color-btn" style="background-color: #00a0a0;" data-color="#00a0a0"></div>
+    <div id="viewport">
+        <canvas id="pixelCanvas"></canvas>
+    </div>
+
+    <div id="ui-bottom">
+        <div class="palette" id="palette">
+            <div class="color-btn active" style="background-color: #000000;" data-color="#000000"></div>
+            <div class="color-btn" style="background-color: #ffffff; border: 1px solid #555;" data-color="#ffffff"></div>
+            <div class="color-btn" style="background-color: #e50000;" data-color="#e50000"></div>
+            <div class="color-btn" style="background-color: #00cc00;" data-color="#00cc00"></div>
+            <div class="color-btn" style="background-color: #0000e5;" data-color="#0000e5"></div>
+            <div class="color-btn" style="background-color: #f5f500;" data-color="#f5f500"></div>
+            <div class="color-btn" style="background-color: #a000a0;" data-color="#a000a0"></div>
+            <div class="color-btn" style="background-color: #00a0a0;" data-color="#00a0a0"></div>
+        </div>
     </div>
 
     <script>
+        const viewport = document.getElementById('viewport');
         const canvas = document.getElementById('pixelCanvas');
         const ctx = canvas.getContext('2d');
         const palette = document.getElementById('palette');
 
-        // 設定畫布參數：50x50 格子，每格大小是 10 像素 (50 * 10 = 500px)
-        const gridSize = 50;
-        const pixelSize = 10;
-        
-        let selectedColor = '#000000'; // 預設選中黑色
+        // 正式設定為 1000x1000 像素大畫布
+        const MAP_SIZE = 1000; 
+        canvas.width = MAP_SIZE;
+        canvas.height = MAP_SIZE;
 
-        // 1. 初始化畫布：全部塗成白色，並畫上淡淡的網格線
-        function initCanvas() {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // 畫網格線
-            ctx.strokeStyle = '#f0f0f0';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= gridSize; i++) {
-                // 畫直線
-                ctx.beginPath();
-                ctx.moveTo(i * pixelSize, 0);
-                ctx.lineTo(i * pixelSize, canvas.height);
-                ctx.stroke();
-                // 畫橫線
-                ctx.beginPath();
-                ctx.moveTo(0, i * pixelSize);
-                ctx.lineTo(canvas.width, i * pixelSize);
-                ctx.stroke();
-            }
+        // 縮放與拖曳狀態變數
+        let scale = 1;         // 目前放大倍率
+        let offsetX = 0;       // 畫布 X 軸偏移量
+        let offsetY = 0;       // 畫布 Y 軸偏移量
+        let isDragging = false;
+        let startX, startY;
+        let touchStartDist = 0; // 手機雙指初始距離
+        let startScale = 1;
+        let isPanning = false;  // 是否正在拖曳
+        let selectedColor = '#000000';
+
+        // 模擬暫存本地的畫布資料（等串接 Firebase 後會改成從資料庫抓）
+        const localMap = {}; 
+
+        // 初始化：把畫布移到螢幕中央
+        function centerCanvas() {
+            scale = Math.min(window.innerWidth, window.innerHeight) / MAP_SIZE * 0.8;
+            offsetX = (window.innerWidth - MAP_SIZE * scale) / 2;
+            offsetY = (window.innerHeight - MAP_SIZE * scale) / 2;
+            render();
         }
 
-        // 2. 處理選色器切換
+        // 核心渲染機制：每次畫面移動或放大，都重新繪製視區
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 填滿背景白底
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+            // 畫出所有已經上色的像素
+            for (let key in localMap) {
+                const [x, y] = key.split(',').map(Number);
+                ctx.fillStyle = localMap[key];
+                ctx.fillRect(x, y, 1, 1);
+            }
+
+            // 將縮放與平移樣式套用到 Canvas DOM 上
+            canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+            canvas.style.transformOrigin = '0 0';
+        }
+
+        // --- 電腦版滑鼠事件 ---
+        viewport.addEventListener('mousedown', (e) => {
+            if (e.target === palette || e.target.classList.contains('color-btn')) return;
+            isDragging = true;
+            isPanning = false;
+            startX = e.clientX - offsetX;
+            startY = e.clientY - offsetY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            isPanning = true;
+            offsetX = e.clientX - startX;
+            offsetY = e.clientY - startY;
+            render();
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            
+            // 如果不是在拖曳畫布，那就是點擊上色
+            if (!isPanning) {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = Math.floor((e.clientX - offsetX) / scale);
+                const clickY = Math.floor((e.clientY - offsetY) / scale);
+
+                if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
+                    localMap[`${clickX},${clickY}`] = selectedColor;
+                    render();
+                }
+            }
+        });
+
+        // 電腦版滾輪放大縮小
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+
+            // 計算滑鼠在畫布上的相對座標
+            const canvasX = (mouseX - offsetX) / scale;
+            const canvasY = (mouseY - offsetY) / scale;
+
+            if (e.deltaY < 0) {
+                scale *= zoomFactor; // 放大
+            } else {
+                scale /= zoomFactor; // 縮小
+            }
+            scale = Math.max(0.2, Math.min(scale, 50)); // 限制放大範圍在 0.2倍 ~ 50倍
+
+            // 修正偏移量，讓縮放中心對準滑鼠指針
+            offsetX = mouseX - canvasX * scale;
+            offsetY = mouseY - canvasY * scale;
+            render();
+        }, { passive: false });
+
+
+        // --- 手機版觸控事件（支援雙指放大與拖曳） ---
+        viewport.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                isPanning = false;
+                startX = e.touches[0].clientX - offsetX;
+                startY = e.touches[0].clientY - offsetY;
+            } else if (e.touches.length === 2) {
+                isDragging = false; // 轉為雙指縮放模式
+                startScale = scale;
+                // 計算雙指間的初始距離
+                touchStartDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+        });
+
+        viewport.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1 && isDragging) {
+                isPanning = true;
+                offsetX = e.touches[0].clientX - startX;
+                offsetY = e.touches[0].clientY - startY;
+                render();
+            } else if (e.touches.length === 2) {
+                // 雙指縮放邏輯
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const factor = dist / touchStartDist;
+                
+                // 雙指中心點
+                const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                const canvasX = (midX - offsetX) / scale;
+                const canvasY = (midY - offsetY) / scale;
+
+                scale = Math.max(0.2, Math.min(startScale * factor, 50));
+                offsetX = midX - canvasX * scale;
+                offsetY = midY - canvasY * scale;
+                render();
+            }
+        }, { passive: false });
+
+        viewport.addEventListener('touchend', (e) => {
+            if (isDragging && !isPanning && e.changedTouches.length > 0) {
+                // 手機單指點擊上色
+                const touch = e.changedTouches[0];
+                const clickX = Math.floor((touch.clientX - offsetX) / scale);
+                const clickY = Math.floor((touch.clientY - offsetY) / scale);
+
+                if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
+                    localMap[`${clickX},${clickY}`] = selectedColor;
+                    render();
+                }
+            }
+            isDragging = false;
+        });
+
+        // 處理顏色切換
         palette.addEventListener('click', (e) => {
             if (e.target.classList.contains('color-btn')) {
-                // 移除舊的 active 樣式
                 document.querySelector('.color-btn.active').classList.remove('active');
-                // 加上新的 active 樣式
                 e.target.classList.add('active');
-                // 改變目前選取的顏色
                 selectedColor = e.target.getAttribute('data-color');
             }
         });
 
-        // 3. 監聽畫布點擊事件
-        canvas.addEventListener('click', (e) => {
-            // 獲取滑鼠在畫布上的相對座標
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-
-            // 計算出點擊的是第幾列、第幾行的格子 (0 到 49)
-            const pixelX = Math.floor(mouseX / pixelSize);
-            const pixelY = Math.floor(mouseY / pixelSize);
-
-            // 在該格子上色
-            drawPixel(pixelX, pixelY, selectedColor);
-        });
-
-        // 4. 畫下像素的函式
-        function drawPixel(x, y, color) {
-            ctx.fillStyle = color;
-            // 稍微縮小 1 像素填滿，保留原本的淡淡網格線外框
-            ctx.fillRect(x * pixelSize + 1, y * pixelSize + 1, pixelSize - 1, pixelSize - 1);
-        }
-
-        // 啟動！
-        initCanvas();
+        // 初始化
+        window.addEventListener('resize', render);
+        centerCanvas();
     </script>
 </body>
 </html>
