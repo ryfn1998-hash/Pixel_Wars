@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Wars 500x500</title>
+    <title>Pixel Wars 完美清晰版</title>
     <style>
         body {
             margin: 0;
-            background-color: #121212;
+            background-color: #1a1a1a;
             color: white;
             font-family: sans-serif;
             overflow: hidden;
@@ -28,7 +28,6 @@
         h1 { margin: 0; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
         p { margin: 5px 0 0 0; font-size: 12px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
 
-        /* 全螢幕縮放視區 */
         #viewport {
             width: 100vw;
             height: 100vh;
@@ -39,14 +38,14 @@
         }
         #viewport:active { cursor: grabbing; }
 
-        /* 🔥 關鍵修正：強制瀏覽器在放大 Canvas 時保持完美的像素方塊，不准模糊化 */
+        /* 🔥 關鍵修正 1：用 CSS Transform 平移，並關閉鋸齒，確保放大100%清晰 */
         canvas {
             display: block;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
             image-rendering: -moz-crisp-edges;
             image-rendering: -webkit-crisp-edges;
             image-rendering: pixelated;
             image-rendering: crisp-edges;
-            background-color: white;
         }
 
         #ui-bottom {
@@ -82,7 +81,7 @@
 
     <div id="ui-top">
         <h1>Pixel Wars 像素大戰</h1>
-        <p id="status">畫布大小：500x500 | 雙指放大、單指拖曳</p>
+        <p id="status">雙指放大到極限即可看見精細格線！</p>
     </div>
 
     <div id="viewport">
@@ -108,10 +107,14 @@
         const ctx = canvas.getContext('2d');
         const palette = document.getElementById('palette');
 
-        // 🟢 正式微調為 500x500 像素
+        // 設定地圖大小（500x500 像素）
         const MAP_SIZE = 500; 
-        canvas.width = MAP_SIZE;
-        canvas.height = MAP_SIZE;
+        
+        // 為了讓畫質無損清晰，我們將畫布實際大小設為 2000x2000
+        // 也就是說，一個像素在畫布上實體佔用 4x4 的空間，這樣放大才不會糊！
+        const CELL_SIZE = 4;
+        canvas.width = MAP_SIZE * CELL_SIZE;
+        canvas.height = MAP_SIZE * CELL_SIZE;
 
         let scale = 1;         
         let offsetX = 0;       
@@ -123,36 +126,55 @@
         let isPanning = false;  
         let selectedColor = '#000000';
 
+        // 模擬本地像素資料
         const localMap = {}; 
 
         function centerCanvas() {
-            scale = Math.min(window.innerWidth, window.innerHeight) / MAP_SIZE * 0.8;
-            offsetX = (window.innerWidth - MAP_SIZE * scale) / 2;
-            offsetY = (window.innerHeight - MAP_SIZE * scale) / 2;
+            scale = Math.min(window.innerWidth, window.innerHeight) / canvas.width * 0.9;
+            offsetX = (window.innerWidth - canvas.width * scale) / 2;
+            offsetY = (window.innerHeight - canvas.height * scale) / 2;
             render();
         }
 
-        // 核心渲染：500x500 格子中，我們直接在（X, Y）畫一個寬高為 1 的方形
+        // 🔥 關鍵修正 2：重新設計渲染引擎，動態繪製格子與格線
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 填滿背景白底
+            // 1. 填滿底色（白色）
             ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // 畫出所有像素點（1x1 像素）
+            // 2. 畫出玩家點擊的像素方塊
             for (let key in localMap) {
                 const [x, y] = key.split(',').map(Number);
                 ctx.fillStyle = localMap[key];
-                ctx.fillRect(x, y, 1, 1);
+                // 留出 0.5 像素的空隙，這樣自然就會形成「清晰的灰格線」，不用額外消耗效能畫線！
+                ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
             }
 
-            // 套用縮放與平移
+            // 3. 當放大到一定程度時，用高效率的方式補上網格線，沒放大時隱藏以免畫面太黑
+            if (scale > 1.5) {
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+                ctx.lineWidth = 0.5;
+                for (let i = 0; i <= MAP_SIZE; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(i * CELL_SIZE, 0);
+                    ctx.lineTo(i * CELL_SIZE, canvas.height);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(0, i * CELL_SIZE);
+                    ctx.lineTo(canvas.width, i * CELL_SIZE);
+                    ctx.stroke();
+                }
+            }
+
+            // 套用位置與縮放
             canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
             canvas.style.transformOrigin = '0 0';
         }
 
-        // --- 電腦版滑鼠事件 ---
+        // --- 電腦滑鼠事件 ---
         viewport.addEventListener('mousedown', (e) => {
             if (e.target === palette || e.target.classList.contains('color-btn')) return;
             isDragging = true;
@@ -174,8 +196,9 @@
             isDragging = false;
             
             if (!isPanning) {
-                const clickX = Math.floor((e.clientX - offsetX) / scale);
-                const clickY = Math.floor((e.clientY - offsetY) / scale);
+                // 計算出點擊到 500x500 中的哪一格
+                const clickX = Math.floor((e.clientX - offsetX) / (scale * CELL_SIZE));
+                const clickY = Math.floor((e.clientY - offsetY) / (scale * CELL_SIZE));
 
                 if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
                     localMap[`${clickX},${clickY}`] = selectedColor;
@@ -186,7 +209,7 @@
 
         viewport.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const zoomFactor = 1.15;
+            const zoomFactor = 1.2;
             const mouseX = e.clientX;
             const mouseY = e.clientY;
             const canvasX = (mouseX - offsetX) / scale;
@@ -197,7 +220,7 @@
             } else {
                 scale /= zoomFactor;
             }
-            scale = Math.max(0.5, Math.min(scale, 80)); // 允許放大到 80 倍，方塊更明顯
+            scale = Math.max(0.1, Math.min(scale, 30));
 
             offsetX = mouseX - canvasX * scale;
             offsetY = mouseY - canvasY * scale;
@@ -205,13 +228,13 @@
         }, { passive: false });
 
 
-        // --- 手機版觸控事件 ---
+        // --- 手機觸控事件 ---
         viewport.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
                 isPanning = false;
                 startX = e.touches[0].clientX - offsetX;
-                startY = e.touches[0].clientY - offsetY;
+                startY = e.touches[0].setTimeout = e.touches[0].clientY - offsetY;
             } else if (e.touches.length === 2) {
                 isDragging = false; 
                 startScale = scale;
@@ -240,7 +263,7 @@
                 const canvasX = (midX - offsetX) / scale;
                 const canvasY = (midY - offsetY) / scale;
 
-                scale = Math.max(0.5, Math.min(startScale * factor, 80));
+                scale = Math.max(0.1, Math.min(startScale * factor, 30));
                 offsetX = midX - canvasX * scale;
                 offsetY = midY - canvasY * scale;
                 render();
@@ -250,8 +273,8 @@
         viewport.addEventListener('touchend', (e) => {
             if (isDragging && !isPanning && e.changedTouches.length > 0) {
                 const touch = e.changedTouches[0];
-                const clickX = Math.floor((touch.clientX - offsetX) / scale);
-                const clickY = Math.floor((touch.clientY - offsetY) / scale);
+                const clickX = Math.floor((touch.clientX - offsetX) / (scale * CELL_SIZE));
+                const clickY = Math.floor((touch.clientY - offsetY) / (scale * CELL_SIZE));
 
                 if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
                     localMap[`${clickX},${clickY}`] = selectedColor;
