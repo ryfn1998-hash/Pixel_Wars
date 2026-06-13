@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Wars 終極銳利版</title>
+    <title>Pixel Wars 500x500 多人連線版</title>
     <style>
         body {
             margin: 0;
@@ -24,11 +24,17 @@
             text-align: center;
             z-index: 10;
             pointer-events: none;
+            width: 90%;
         }
         h1 { margin: 0; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-        p { margin: 5px 0 0 0; font-size: 12px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+        p { margin: 5px 0 0 0; font-size: 13px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+        
+        /* 倒數計時器樣式 */
+        #timer {
+            font-weight: bold;
+            color: #ff3b30;
+        }
 
-        /* 全螢幕縮放容器 */
         #viewport {
             width: 100vw;
             height: 100vh;
@@ -39,20 +45,17 @@
         }
         #viewport:active { cursor: grabbing; }
 
-        /* 畫布外殼：這裡用 CSS 來渲染完美的像素格線 */
         #canvas-wrapper {
             position: absolute;
             box-shadow: 0 0 40px rgba(0,0,0,0.6);
             background-color: white;
-            /* 預設沒放大時格線淡淡的，才不會整片黑黑的 */
             background-image: 
                 linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
                 linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
-            background-size: 10px 10px; /* 一個格子 10x10 */
+            background-size: 10px 10px;
             transform-origin: 0 0;
         }
 
-        /* ⚡ 終極修正：強制關閉瀏覽器的模糊平滑功能，還原顆粒感 */
         canvas {
             display: block;
             width: 100%;
@@ -91,12 +94,15 @@
             transform: scale(1.1);
         }
     </style>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
     <div id="ui-top">
         <h1>Pixel Wars 像素大戰</h1>
-        <p id="status">規格：500x500 | 雙指放大後即可看到清晰網格！</p>
+        <p id="status">正在連線至伺服器...</p>
     </div>
 
     <div id="viewport">
@@ -119,28 +125,40 @@
     </div>
 
     <script>
+        // 1. 你的 Firebase 配置金鑰（已補上即時資料庫網址）
+        const firebaseConfig = {
+            apiKey: "AIzaSyCBdgYtNIFl21qObobpNCVsovzrAoPPUv8",
+            authDomain: "my-pixel-wars.firebaseapp.com",
+            projectId: "my-pixel-wars",
+            storageBucket: "my-pixel-wars.firebasestorage.app",
+            messagingSenderId: "559903428145",
+            appId: "1:559903428145:web:2f9b3db4f56a1abb918f10",
+            measurementId: "G-Q378F75DH8",
+            databaseURL: "https://my-pixel-wars-default-rtdb.firebaseio.com" // 自動對接你的資料庫
+        };
+
+        // 初始化 Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const pixelsRef = db.ref('pixels'); // 儲存像素的資料夾路徑
+
+        // 2. 畫布基本設定
         const viewport = document.getElementById('viewport');
         const wrapper = document.getElementById('canvas-wrapper');
         const canvas = document.getElementById('pixelCanvas');
         const ctx = canvas.getContext('2d');
         const palette = document.getElementById('palette');
+        const statusText = document.getElementById('status');
 
-        // 設定地圖格數 500x500
         const MAP_SIZE = 500; 
-        // 每一格在畫布上的實體基礎大小設定為 10 像素
         const CELL_SIZE = 10;
 
-        // 設定容器和 Canvas 的尺寸大小
         wrapper.style.width = (MAP_SIZE * CELL_SIZE) + 'px';
         wrapper.style.height = (MAP_SIZE * CELL_SIZE) + 'px';
         canvas.width = MAP_SIZE;
         canvas.height = MAP_SIZE;
 
-        // 🟢 核心 JavaScript 修正：關閉 Canvas 內建的圖片平滑模糊功能
         ctx.imageSmoothingEnabled = false;
-        ctx.mozImageSmoothingEnabled = false;
-        ctx.webkitImageSmoothingEnabled = false;
-        ctx.msImageSmoothingEnabled = false;
 
         let scale = 1;         
         let offsetX = 0;       
@@ -152,10 +170,11 @@
         let isPanning = false;  
         let selectedColor = '#000000';
 
+        // 本地像素快照資料庫
         const localMap = {}; 
+        let cooldownEndTime = 0; // 冷卻結束的時間戳記
 
         function centerCanvas() {
-            // 讓整個 500x500 的大畫布預設縮小完整塞進螢幕
             scale = Math.min(window.innerWidth, window.innerHeight) / (MAP_SIZE * CELL_SIZE) * 0.9;
             offsetX = (window.innerWidth - (MAP_SIZE * CELL_SIZE) * scale) / 2;
             offsetY = (window.innerHeight - (MAP_SIZE * CELL_SIZE) * scale) / 2;
@@ -163,17 +182,15 @@
         }
 
         function render() {
-            // 重新繪製 Canvas 本身
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 繪製玩家點擊的點（1x1 的真實像素點）
+            // 點點渲染
             for (let key in localMap) {
                 const [x, y] = key.split(',').map(Number);
                 ctx.fillStyle = localMap[key];
                 ctx.fillRect(x, y, 1, 1);
             }
 
-            // 當放大倍率很高時，加深 CSS 網格線的顏色，方便玩家對齊；縮小時變淡
             if (scale > 0.8) {
                 wrapper.style.backgroundImage = `
                     linear-gradient(to right, rgba(0,0,0,0.15) 1px, transparent 1px),
@@ -186,11 +203,91 @@
                 `;
             }
 
-            // 同步對容器做平移和縮放
             wrapper.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
         }
 
-        // --- 電腦滑鼠事件 ---
+        // 3. 🟢 核心功能：監聽 Firebase 資料庫，即時同步全球玩家的像素
+        pixelsRef.on('child_added', (snapshot) => {
+            const key = snapshot.key; // 格式如 "x245_y112"
+            const data = snapshot.val();
+            const cleanKey = key.replace('x', '').replace('y', '').replace('_', ',');
+            localMap[cleanKey] = data.color;
+            render();
+        });
+
+        pixelsRef.on('child_changed', (snapshot) => {
+            const key = snapshot.key;
+            const data = snapshot.val();
+            const cleanKey = key.replace('x', '').replace('y', '').replace('_', ',');
+            localMap[cleanKey] = data.color;
+            render();
+        });
+
+        // 載入完成通知
+        db.ref('.info/connected').on('value', (snapshot) => {
+            if (snapshot.val() === true) {
+                updateStatusText();
+            } else {
+                statusText.innerText = "斷線中，正在重新連線...";
+            }
+        });
+
+        // 4. 🟢 核心功能：5 分鐘冷卻機制與本地計時器
+        // 從瀏覽器快取讀取之前的冷卻結束時間，防止重新整理網頁作弊
+        if (localStorage.getItem('pixelCooldownEnd')) {
+            cooldownEndTime = parseInt(localStorage.getItem('pixelCooldownEnd'), 10);
+        }
+
+        function startCooldown() {
+            // 設定 5 分鐘後的時間戳記 (5 * 60 * 1000 毫秒)
+            cooldownEndTime = Date.now() + (5 * 60 * 1000);
+            localStorage.setItem('pixelCooldownEnd', cooldownEndTime);
+            updateStatusText();
+        }
+
+        function updateStatusText() {
+            const now = Date.now();
+            if (now < cooldownEndTime) {
+                const timeLeft = Math.ceil((cooldownEndTime - now) / 1000);
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                statusText.innerHTML = `冷卻中！請等待 <span id="timer">${minutes}:${seconds < 10 ? '0' : ''}${seconds}</span> 後再下一子`;
+                
+                // 每秒更新一次時間
+                setTimeout(updateStatusText, 1000);
+            } else {
+                statusText.innerText = "可以點擊畫布放置像素點！";
+            }
+        }
+
+        // 嘗試上色並上傳至資料庫
+        function tryPlacePixel(clickX, clickY) {
+            if (Date.now() < cooldownEndTime) {
+                alert(`冷卻中！請等待倒數結束。`);
+                return;
+            }
+
+            if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
+                // 將座標轉化為 Firebase 合法的 Key 格式 (例如 "x120_y450")
+                const dbKey = `x${clickX}_y${clickY}`;
+                
+                // 推送到雲端即時資料庫
+                pixelsRef.child(dbKey).set({
+                    color: selectedColor,
+                    timestamp: ServerValue.TIMESTAMP // 使用伺服器時間
+                }).then(() => {
+                    // 成功後啟動 5 分鐘冷卻
+                    startCooldown();
+                }).catch((error) => {
+                    console.error("上傳失敗：", error);
+                });
+            }
+        }
+
+        // 定義 ServerValue 變數
+        const ServerValue = firebase.database.ServerValue;
+
+        // --- 滑鼠與觸控操作事件（維持原本完美的縮放與拖曳功能） ---
         viewport.addEventListener('mousedown', (e) => {
             if (e.target === palette || e.target.classList.contains('color-btn')) return;
             isDragging = true;
@@ -210,16 +307,10 @@
         window.addEventListener('mouseup', (e) => {
             if (!isDragging) return;
             isDragging = false;
-            
             if (!isPanning) {
-                // 計算點擊位置對應到 500x500 的哪一格
                 const clickX = Math.floor((e.clientX - offsetX) / (scale * CELL_SIZE));
                 const clickY = Math.floor((e.clientY - offsetY) / (scale * CELL_SIZE));
-
-                if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
-                    localMap[`${clickX},${clickY}`] = selectedColor;
-                    render();
-                }
+                tryPlacePixel(clickX, clickY);
             }
         });
 
@@ -231,20 +322,15 @@
             const canvasX = (mouseX - offsetX) / scale;
             const canvasY = (mouseY - offsetY) / scale;
 
-            if (e.deltaY < 0) {
-                scale *= zoomFactor;
-            } else {
-                scale /= zoomFactor;
-            }
-            scale = Math.max(0.05, Math.min(scale, 15)); // 限制縮放範圍
+            if (e.deltaY < 0) scale *= zoomFactor;
+            else scale /= zoomFactor;
+            scale = Math.max(0.05, Math.min(scale, 15));
 
             offsetX = mouseX - canvasX * scale;
             offsetY = mouseY - canvasY * scale;
             render();
         }, { passive: false });
 
-
-        // --- 手機/平版觸控事件 ---
         viewport.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -291,11 +377,7 @@
                 const touch = e.changedTouches[0];
                 const clickX = Math.floor((touch.clientX - offsetX) / (scale * CELL_SIZE));
                 const clickY = Math.floor((touch.clientY - offsetY) / (scale * CELL_SIZE));
-
-                if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
-                    localMap[`${clickX},${clickY}`] = selectedColor;
-                    render();
-                }
+                tryPlacePixel(clickX, clickY);
             }
             isDragging = false;
         });
