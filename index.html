@@ -232,15 +232,14 @@
             }
         });
 
-        // 4. 🟢 核心功能：5 分鐘冷卻機制與本地計時器
-        // 從瀏覽器快取讀取之前的冷卻結束時間，防止重新整理網頁作弊
+        // 4. 🟢 核心功能：1 分鐘冷卻機制與本地計時器
         if (localStorage.getItem('pixelCooldownEnd')) {
             cooldownEndTime = parseInt(localStorage.getItem('pixelCooldownEnd'), 10);
         }
 
         function startCooldown() {
-            // 設定 5 分鐘後的時間戳記 (5 * 60 * 1000 毫秒)
-            cooldownEndTime = Date.now() + (5 * 60 * 1000);
+            // 💡 已成功修改：將時間戳記改為 1 分鐘後 (1 * 60 * 1000 毫秒)
+            cooldownEndTime = Date.now() + (1 * 60 * 1000);
             localStorage.setItem('pixelCooldownEnd', cooldownEndTime);
             updateStatusText();
         }
@@ -268,7 +267,6 @@
             }
 
             if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
-                // 將座標轉化為 Firebase 合法的 Key 格式 (例如 "x120_y450")
                 const dbKey = `x${clickX}_y${clickY}`;
                 
                 // 推送到雲端即時資料庫
@@ -276,7 +274,7 @@
                     color: selectedColor,
                     timestamp: ServerValue.TIMESTAMP // 使用伺服器時間
                 }).then(() => {
-                    // 成功後啟動 5 分鐘冷卻
+                    // 成功後啟動 1 分鐘冷卻
                     startCooldown();
                 }).catch((error) => {
                     console.error("上傳失敗：", error);
