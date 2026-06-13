@@ -14,13 +14,135 @@
             align-items: center;
             font-family: sans-serif;
         }
-        h1 { margin-top: 20px; }
+        h1 { margin-top: 20px; margin-bottom: 5px; }
+        
+        /* 畫布外框與樣式 */
+        #canvas-container {
+            margin: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            background-color: white;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair; /* 滑鼠變成十字準星 */
+        }
+
+        /* 選色器工具列 */
+        .palette {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            background: #2a2a2a;
+            padding: 10px 20px;
+            border-radius: 30px;
+        }
+        .color-btn {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .color-btn:hover {
+            transform: scale(1.1);
+        }
+        .color-btn.active {
+            border-color: white; /* 被選中的顏色圈圈會發白框 */
+        }
     </style>
 </head>
 <body>
 
-    <h1>歡迎來到像素大戰！</h1>
-    <p>畫布準備中...</p>
+    <h1>Pixel Wars 像素大戰</h1>
+    <p>目前狀態：單機測試版（點擊畫布即可上色）</p>
 
+    <!-- 畫布容器 -->
+    <div id="canvas-container">
+        <canvas id="pixelCanvas" width="500" height="500"></canvas>
+    </div>
+
+    <!-- 選色工具列 -->
+    <div class="palette" id="palette">
+        <div class="color-btn active" style="background-color: #000000;" data-color="#000000"></div>
+        <div class="color-btn" style="background-color: #ffffff; border: 1px solid #ccc;" data-color="#ffffff"></div>
+        <div class="color-btn" style="background-color: #e50000;" data-color="#e50000"></div>
+        <div class="color-btn" style="background-color: #00cc00;" data-color="#00cc00"></div>
+        <div class="color-btn" style="background-color: #0000e5;" data-color="#0000e5"></div>
+        <div class="color-btn" style="background-color: #f5f500;" data-color="#f5f500"></div>
+        <div class="color-btn" style="background-color: #a000a0;" data-color="#a000a0"></div>
+        <div class="color-btn" style="background-color: #00a0a0;" data-color="#00a0a0"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('pixelCanvas');
+        const ctx = canvas.getContext('2d');
+        const palette = document.getElementById('palette');
+
+        // 設定畫布參數：50x50 格子，每格大小是 10 像素 (50 * 10 = 500px)
+        const gridSize = 50;
+        const pixelSize = 10;
+        
+        let selectedColor = '#000000'; // 預設選中黑色
+
+        // 1. 初始化畫布：全部塗成白色，並畫上淡淡的網格線
+        function initCanvas() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 畫網格線
+            ctx.strokeStyle = '#f0f0f0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= gridSize; i++) {
+                // 畫直線
+                ctx.beginPath();
+                ctx.moveTo(i * pixelSize, 0);
+                ctx.lineTo(i * pixelSize, canvas.height);
+                ctx.stroke();
+                // 畫橫線
+                ctx.beginPath();
+                ctx.moveTo(0, i * pixelSize);
+                ctx.lineTo(canvas.width, i * pixelSize);
+                ctx.stroke();
+            }
+        }
+
+        // 2. 處理選色器切換
+        palette.addEventListener('click', (e) => {
+            if (e.target.classList.contains('color-btn')) {
+                // 移除舊的 active 樣式
+                document.querySelector('.color-btn.active').classList.remove('active');
+                // 加上新的 active 樣式
+                e.target.classList.add('active');
+                // 改變目前選取的顏色
+                selectedColor = e.target.getAttribute('data-color');
+            }
+        });
+
+        // 3. 監聽畫布點擊事件
+        canvas.addEventListener('click', (e) => {
+            // 獲取滑鼠在畫布上的相對座標
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // 計算出點擊的是第幾列、第幾行的格子 (0 到 49)
+            const pixelX = Math.floor(mouseX / pixelSize);
+            const pixelY = Math.floor(mouseY / pixelSize);
+
+            // 在該格子上色
+            drawPixel(pixelX, pixelY, selectedColor);
+        });
+
+        // 4. 畫下像素的函式
+        function drawPixel(x, y, color) {
+            ctx.fillStyle = color;
+            // 稍微縮小 1 像素填滿，保留原本的淡淡網格線外框
+            ctx.fillRect(x * pixelSize + 1, y * pixelSize + 1, pixelSize - 1, pixelSize - 1);
+        }
+
+        // 啟動！
+        initCanvas();
+    </script>
 </body>
 </html>
