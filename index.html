@@ -29,7 +29,6 @@
         h1 { margin: 0; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
         p { margin: 5px 0 0 0; font-size: 13px; color: #aaa; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
         
-        /* 倒數計時器樣式 */
         #timer {
             font-weight: bold;
             color: #ff3b30;
@@ -125,7 +124,6 @@
     </div>
 
     <script>
-        // 1. 你的 Firebase 配置金鑰（已補上即時資料庫網址）
         const firebaseConfig = {
             apiKey: "AIzaSyCBdgYtNIFl21qObobpNCVsovzrAoPPUv8",
             authDomain: "my-pixel-wars.firebaseapp.com",
@@ -134,15 +132,13 @@
             messagingSenderId: "559903428145",
             appId: "1:559903428145:web:2f9b3db4f56a1abb918f10",
             measurementId: "G-Q378F75DH8",
-            databaseURL: "https://my-pixel-wars-default-rtdb.firebaseio.com" // 自動對接你的資料庫
+            databaseURL: "https://my-pixel-wars-default-rtdb.firebaseio.com"
         };
 
-        // 初始化 Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        const pixelsRef = db.ref('pixels'); // 儲存像素的資料夾路徑
+        const pixelsRef = db.ref('pixels');
 
-        // 2. 畫布基本設定
         const viewport = document.getElementById('viewport');
         const wrapper = document.getElementById('canvas-wrapper');
         const canvas = document.getElementById('pixelCanvas');
@@ -170,9 +166,8 @@
         let isPanning = false;  
         let selectedColor = '#000000';
 
-        // 本地像素快照資料庫
         const localMap = {}; 
-        let cooldownEndTime = 0; // 冷卻結束的時間戳記
+        let cooldownEndTime = 0;
 
         function centerCanvas() {
             scale = Math.min(window.innerWidth, window.innerHeight) / (MAP_SIZE * CELL_SIZE) * 0.9;
@@ -184,7 +179,6 @@
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 點點渲染
             for (let key in localMap) {
                 const [x, y] = key.split(',').map(Number);
                 ctx.fillStyle = localMap[key];
@@ -206,9 +200,8 @@
             wrapper.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
         }
 
-        // 3. 🟢 核心功能：監聽 Firebase 資料庫，即時同步全球玩家的像素
         pixelsRef.on('child_added', (snapshot) => {
-            const key = snapshot.key; // 格式如 "x245_y112"
+            const key = snapshot.key;
             const data = snapshot.val();
             const cleanKey = key.replace('x', '').replace('y', '').replace('_', ',');
             localMap[cleanKey] = data.color;
@@ -223,7 +216,6 @@
             render();
         });
 
-        // 載入完成通知
         db.ref('.info/connected').on('value', (snapshot) => {
             if (snapshot.val() === true) {
                 updateStatusText();
@@ -232,13 +224,11 @@
             }
         });
 
-        // 4. 🟢 核心功能：1 分鐘冷卻機制與本地計時器
         if (localStorage.getItem('pixelCooldownEnd')) {
             cooldownEndTime = parseInt(localStorage.getItem('pixelCooldownEnd'), 10);
         }
 
         function startCooldown() {
-            // 💡 已成功修改：將時間戳記改為 1 分鐘後 (1 * 60 * 1000 毫秒)
             cooldownEndTime = Date.now() + (1 * 60 * 1000);
             localStorage.setItem('pixelCooldownEnd', cooldownEndTime);
             updateStatusText();
@@ -252,14 +242,12 @@
                 const seconds = timeLeft % 60;
                 statusText.innerHTML = `冷卻中！請等待 <span id="timer">${minutes}:${seconds < 10 ? '0' : ''}${seconds}</span> 後再下一子`;
                 
-                // 每秒更新一次時間
                 setTimeout(updateStatusText, 1000);
             } else {
                 statusText.innerText = "可以點擊畫布放置像素點！";
             }
         }
 
-        // 嘗試上色並上傳至資料庫
         function tryPlacePixel(clickX, clickY) {
             if (Date.now() < cooldownEndTime) {
                 alert(`冷卻中！請等待倒數結束。`);
@@ -269,12 +257,10 @@
             if (clickX >= 0 && clickX < MAP_SIZE && clickY >= 0 && clickY < MAP_SIZE) {
                 const dbKey = `x${clickX}_y${clickY}`;
                 
-                // 推送到雲端即時資料庫
                 pixelsRef.child(dbKey).set({
                     color: selectedColor,
-                    timestamp: ServerValue.TIMESTAMP // 使用伺服器時間
+                    timestamp: ServerValue.TIMESTAMP
                 }).then(() => {
-                    // 成功後啟動 1 分鐘冷卻
                     startCooldown();
                 }).catch((error) => {
                     console.error("上傳失敗：", error);
@@ -282,10 +268,8 @@
             }
         }
 
-        // 定義 ServerValue 變數
         const ServerValue = firebase.database.ServerValue;
 
-        // --- 滑鼠與觸控操作事件（維持原本完美的縮放與拖曳功能） ---
         viewport.addEventListener('mousedown', (e) => {
             if (e.target === palette || e.target.classList.contains('color-btn')) return;
             isDragging = true;
@@ -390,6 +374,20 @@
 
         window.addEventListener('resize', render);
         centerCanvas();
+
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (
+                e.key === 'F12' || 
+                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) || 
+                (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
+            ) {
+                e.preventDefault();
+            }
+        });
     </script>
 </body>
 </html>
