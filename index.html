@@ -80,6 +80,7 @@
             padding: 8px 15px;
             border-radius: 30px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            align-items: center;
         }
         .color-btn {
             width: 32px;
@@ -87,10 +88,35 @@
             border-radius: 50%;
             border: 2px solid transparent;
             cursor: pointer;
+            box-sizing: border-box;
         }
         .color-btn.active {
             border-color: white;
             transform: scale(1.1);
+        }
+        
+        /* 🎨 自訂顏色按鈕專用彩虹漸層與隱藏 input 樣式 */
+        .color-custom-label {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            background: linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+            box-sizing: border-box;
+            display: block;
+            transition: transform 0.1s;
+        }
+        .color-custom-label.active {
+            border-color: white;
+            transform: scale(1.1);
+        }
+        #custom-color-picker {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
         }
     </style>
 
@@ -120,6 +146,9 @@
             <div class="color-btn" style="background-color: #f5f500;" data-color="#f5f500"></div>
             <div class="color-btn" style="background-color: #a000a0;" data-color="#a000a0"></div>
             <div class="color-btn" style="background-color: #00a0a0;" data-color="#00a0a0"></div>
+            
+            <label class="color-custom-label" id="custom-color-label" for="custom-color-picker" title="自訂顏色"></label>
+            <input type="color" id="custom-color-picker" value="#ff0000">
         </div>
     </div>
 
@@ -145,6 +174,10 @@
         const ctx = canvas.getContext('2d');
         const palette = document.getElementById('palette');
         const statusText = document.getElementById('status');
+        
+        // 自訂顏色 DOM 宣告
+        const customColorPicker = document.getElementById('custom-color-picker');
+        const customColorLabel = document.getElementById('custom-color-label');
 
         const MAP_SIZE = 500; 
         const CELL_SIZE = 10;
@@ -168,12 +201,24 @@
 
         const localMap = {}; 
         let cooldownEndTime = 0;
+        
+        // 🚀 效能優化：引入防卡死渲染節流閥機制
+        let renderRequested = false;
+        function requestRender() {
+            if (!renderRequested) {
+                renderRequested = true;
+                requestAnimationFrame(() => {
+                    renderRequested = false;
+                    render();
+                });
+            }
+        }
 
         function centerCanvas() {
             scale = Math.min(window.innerWidth, window.innerHeight) / (MAP_SIZE * CELL_SIZE) * 0.9;
             offsetX = (window.innerWidth - (MAP_SIZE * CELL_SIZE) * scale) / 2;
             offsetY = (window.innerHeight - (MAP_SIZE * CELL_SIZE) * scale) / 2;
-            render();
+            requestRender();
         }
 
         function render() {
@@ -205,7 +250,7 @@
             const data = snapshot.val();
             const cleanKey = key.replace('x', '').replace('y', '').replace('_', ',');
             localMap[cleanKey] = data.color;
-            render();
+            requestRender(); // 優化點：改用節流刷新，多用戶連點時不再卡頓
         });
 
         pixelsRef.on('child_changed', (snapshot) => {
@@ -213,7 +258,7 @@
             const data = snapshot.val();
             const cleanKey = key.replace('x', '').replace('y', '').replace('_', ',');
             localMap[cleanKey] = data.color;
-            render();
+            requestRender(); // 優化點：改用節流刷新
         });
 
         db.ref('.info/connected').on('value', (snapshot) => {
@@ -229,7 +274,6 @@
         }
 
         function startCooldown() {
-            // 💡 已修改：將冷卻時間計算調整為 5 秒鐘 (5 * 1000 毫秒)
             cooldownEndTime = Date.now() + (5 * 1000);
             localStorage.setItem('pixelCooldownEnd', cooldownEndTime);
             updateStatusText();
@@ -272,7 +316,7 @@
         const ServerValue = firebase.database.ServerValue;
 
         viewport.addEventListener('mousedown', (e) => {
-            if (e.target === palette || e.target.classList.contains('color-btn')) return;
+            if (e.target === palette || e.target.closest('.color-btn') || e.target === customColorLabel) return;
             isDragging = true;
             isPanning = false;
             startX = e.clientX - offsetX;
@@ -284,7 +328,7 @@
             isPanning = true;
             offsetX = e.clientX - startX;
             offsetY = e.clientY - startY;
-            render();
+            requestRender();
         });
 
         window.addEventListener('mouseup', (e) => {
@@ -311,10 +355,11 @@
 
             offsetX = mouseX - canvasX * scale;
             offsetY = mouseY - canvasY * scale;
-            render();
+            requestRender();
         }, { passive: false });
 
         viewport.addEventListener('touchstart', (e) => {
+            if (e.target === palette || e.target.closest('.color-btn') || e.target === customColorLabel) return;
             if (e.touches.length === 1) {
                 isDragging = true;
                 isPanning = false;
@@ -331,12 +376,13 @@
         });
 
         viewport.addEventListener('touchmove', (e) => {
+            if (e.target === palette || e.target.closest('.color-btn') || e.target === customColorLabel) return;
             e.preventDefault();
             if (e.touches.length === 1 && isDragging) {
                 isPanning = true;
                 offsetX = e.touches[0].clientX - startX;
                 offsetY = e.touches[0].clientY - startY;
-                render();
+                requestRender();
             } else if (e.touches.length === 2) {
                 const dist = Math.hypot(
                     e.touches[0].clientX - e.touches[1].clientX,
@@ -351,7 +397,7 @@
                 scale = Math.max(0.05, Math.min(startScale * factor, 15));
                 offsetX = midX - canvasX * scale;
                 offsetY = midY - canvasY * scale;
-                render();
+                requestRender();
             }
         }, { passive: false });
 
@@ -365,15 +411,39 @@
             isDragging = false;
         });
 
+        // 🎨 優化調色盤選取邏輯（包含自訂顏色切換樣式）
         palette.addEventListener('click', (e) => {
             if (e.target.classList.contains('color-btn')) {
-                document.querySelector('.color-btn.active').classList.remove('active');
+                const activeBtn = document.querySelector('.color-btn.active') || document.querySelector('.color-custom-label.active');
+                if (activeBtn) activeBtn.classList.remove('active');
+                
                 e.target.classList.add('active');
                 selectedColor = e.target.getAttribute('data-color');
             }
         });
 
-        window.addEventListener('resize', render);
+        // 🎨 監聽玩家調整自訂選色器事件
+        customColorPicker.addEventListener('input', (e) => {
+            const activeBtn = document.querySelector('.color-btn.active') || document.querySelector('.color-custom-label.active');
+            if (activeBtn) activeBtn.classList.remove('active');
+            
+            customColorLabel.classList.add('active');
+            selectedColor = e.target.value;
+            
+            // 將彩虹外觀即時替換為玩家自訂選取的單色
+            customColorLabel.style.background = selectedColor;
+        });
+        
+        // 點擊已經選好的自訂顏色按鈕也能直接切換過去
+        customColorLabel.addEventListener('click', () => {
+            const activeBtn = document.querySelector('.color-btn.active') || document.querySelector('.color-custom-label.active');
+            if (activeBtn) activeBtn.classList.remove('active');
+            
+            customColorLabel.classList.add('active');
+            selectedColor = customColorPicker.value;
+        });
+
+        window.addEventListener('resize', () => { requestRender(); });
         centerCanvas();
 
         document.addEventListener('contextmenu', (e) => {
