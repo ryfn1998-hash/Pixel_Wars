@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pixel Wars FR官方版</title>
+    <title>Pixel Wars 全球官方版</title>
     <style>
         body {
             margin: 0;
@@ -240,7 +240,7 @@
                 const timeLeft = Math.ceil((cooldownEndTime - now) / 1000);
                 const minutes = Math.floor(timeLeft / 60);
                 const seconds = timeLeft % 60;
-                statusText.innerHTML = `冷卻中！請等待 <span id="timer">${minutes}:${seconds < 10 ? '0' : ''}${seconds}</span> 後再下一子`;
+                statusText.innerHTML = `冷卻中！請等待 <span id="timer">${minutes}:${seconds < 10 ? '0' : ''}${seconds}</span> 後繼續`;
                 
                 setTimeout(updateStatusText, 1000);
             } else {
