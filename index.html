@@ -229,7 +229,8 @@
         }
 
         function startCooldown() {
-            cooldownEndTime = Date.now() + (1 * 60 * 1000);
+            // 💡 已修改：將冷卻時間計算調整為 5 秒鐘 (5 * 1000 毫秒)
+            cooldownEndTime = Date.now() + (5 * 1000);
             localStorage.setItem('pixelCooldownEnd', cooldownEndTime);
             updateStatusText();
         }
